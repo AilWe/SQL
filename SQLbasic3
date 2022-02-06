@@ -1,0 +1,258 @@
+--from/join -> where -> group by -> having -> select -> distinct -> union -> order by
+
+--Union vs. Union ALL: 
+--common features:
+--1. both are used to combine result sets vertically
+SELECT City,Country
+FROM Customers
+UNION ALL
+SELECT City,Country
+FROM Employees
+ORDER BY 1
+
+SELECT City,Country
+FROM Customers
+UNION
+SELECT City,Country
+FROM Employees
+ORDER BY 1
+--2. criteria: union multiple result sets
+--number of columns must be the same
+SELECT City,Country
+FROM Customers
+UNION
+SELECT City,Country, Region
+FROM Employees
+
+--column types must be identical
+SELECT City,Country
+FROM Customers
+UNION
+SELECT City,Country, Region
+FROM Employees
+
+--3. alias must be given in the first SELECT statement
+SELECT City, Country Cty
+FROM Customers
+UNION
+SELECT City, Country 
+FROM Employees
+
+--difference:
+--1. UNION will remove duplicate records, UNION ALL does not
+--2. UNION: the records from the first column will be sorted automatically
+--3. UNION cannot be used in recursive CTE, but UNION ALL can
+SELECT City,Country
+FROM Customers
+UNION ALL
+SELECT City,Country
+FROM Employees
+
+
+SELECT City,Country
+FROM Customers
+UNION
+SELECT City,Country
+FROM Employees
+
+--Window Function: operate on a set of rows, return a single aggregated value for each row by adding extra columns
+--RANK(): When there is a tie, there will be value gap of rank
+--rank for product price
+SELECT ProductID, ProductName, UnitPrice, RANK() OVER(ORDER BY UnitPrice) RNK
+FROM Products
+
+SELECT ProductID, ProductName, UnitPrice, RANK() OVER(ORDER BY UnitPrice DESC) RNK
+FROM Products
+
+--product with the 2nd highest price
+SELECT dt.ProductID, dt.ProductName, dt.UnitPrice, dt.RNK
+FROM (SELECT ProductID, ProductName, UnitPrice, RANK() OVER(ORDER BY UnitPrice DESC) RNK
+FROM Products) dt
+WHERE RNK = 2;
+
+
+--DENSE_RANK(): will not skip any numbers if there is a tie in preceding records
+SELECT ProductID, ProductName, UnitPrice, RANK() OVER(ORDER BY UnitPrice DESC) RNK, 
+DENSE_RANK() OVER(ORDER BY UnitPrice DESC) DenseRNK
+FROM Products
+
+--ROW_NUMBER(): simply return the row number of the sorted records starting with 1
+SELECT ProductID, ProductName, UnitPrice, RANK() OVER(ORDER BY UnitPrice DESC) RNK, 
+DENSE_RANK() OVER(ORDER BY UnitPrice DESC) DenseRNK,
+ROW_NUMBER() OVER(ORDER BY UnitPrice DESC) RowNum
+FROM Products
+
+
+--partition by: optional; usd to divide the result set into partitions and perform computation on each subset of partitioned data
+--list customers from every country with the ranking for number of orders
+SELECT c.ContactName, c.Country, COUNT(o.OrderID) AS NumOfOrders, RANK() OVER(PARTITION BY c.Country ORDER BY COUNT(o.OrderID) DESC) AS RNK
+FROM Customers c JOIN Orders o ON c.CustomerID = o.CustomerID
+GROUP BY c.ContactName, c.Country
+
+--- find top 3 customers from every country with maximum orders
+SELECT dt.ContactName, dt.Country, dt.NumOfOrders, dt.RNK
+FROM (SELECT c.ContactName, c.Country, COUNT(o.OrderID) AS NumOfOrders, RANK() OVER(PARTITION BY c.Country ORDER BY COUNT(o.OrderID) DESC) AS RNK
+FROM Customers c JOIN Orders o ON c.CustomerID = o.CustomerID
+GROUP BY c.ContactName, c.Country) dt
+WHERE RNK <= 3
+
+
+--cte: common table expression
+SELECT c.ContactName, c.City, dt.TotalNum
+FROM Customers c LEFT JOIN (
+SELECT CustomerID, COUNT(OrderID) TotalNum FROM Orders 
+GROUP BY CustomerID
+) dt ON c.CustomerID = dt.CustomerID
+
+WITH OrderCountCTE
+AS(
+SELECT CustomerID, COUNT(OrderID) TotalNum FROM Orders 
+GROUP BY CustomerID
+)
+SELECT c.ContactName, c.City, cte.TotalNum
+FROM Customers c LEFT JOIN OrderCountCTE cte ON c.CustomerID = CTE.CustomerID
+
+
+--recursive CTE: cte will call itself again and again until it thinks that it can stop and return something
+--initialization: the initial call to the cte which passes in some values to get things started
+--recursive rule: cte will call itself again and again until it finally returns something
+
+SELECT EmployeeID, FirstName, ReportsTo
+FROM Employees
+
+--get employee levels
+-- level 1: Andrew
+-- level 2: Nancy, Janet, Margaret, Steven, Laura
+-- level 3: Michael, Robert, Anne
+
+WITH empHierachyCTE
+AS
+(
+SELECT EmployeeID, FirstName, ReportsTo, 1 lvl
+FROM Employees WHERE ReportsTo is null
+UNION ALL
+SELECT e.EmployeeID, e.FirstName, e.ReportsTo, cte.lvl + 1
+FROM Employees e inner join empHierachyCTE cte ON e.ReportsTo = cte.EmployeeID
+)
+SELECT * FROM empHierachyCTE
+
+--temporary table: special type of table so that we can store data temporarily
+--identifiers: names of databases, tables, columns..
+--# -> local temp table: 
+CREATE TABLE #LocalTemp
+(
+Number int
+)
+DECLARE @Variable INT = 1
+WHILE (@Variable <= 10)
+BEGIN
+INSERT INTO #LocalTemp(Number) VALUES(@Variable)
+SET @Variable = @Variable  + 1
+END
+
+SELECT *
+FROM #LocalTemp
+--## -> global temp objects
+CREATE TABLE ##GlobalTemp
+(
+Number int
+)
+DECLARE @Num INT = 1
+WHILE (@Num <= 10)
+BEGIN
+INSERT INTO ##GlobalTemp(Number) VALUES(@Num)
+SET @Num = @Num  + 1
+END
+
+--table variable:
+declare @today datetime
+select @today=getdate()
+print @today
+
+DECLARE @WeekDays TABLE(DayNum int, DayAbb varchar(10), WeekName varchar(10))
+INSERT INTO @WeekDays
+VALUES 
+(1,'Mon','Monday')  ,
+(2,'Tue','Tuesday') ,
+(3,'Wed','Wednesday') ,
+(4,'Thu','Thursday'),
+(5,'Fri','Friday'),
+(6,'Sat','Saturday'),
+(7,'Sun','Sunday')	
+SELECT * FROM @WeekDays
+SELECT *
+FROM tempdb.sys.tables
+
+--temp table vs. table variables
+--1. temp tables and table variables are sroted in tempDB
+--2. scope: local temp/global temp; table variable: current batch
+--3. size: >100 rows; <100 rows 
+--4.usage: temp tables cannot be used in SP, Functions; table varaibles can 
+--5. structures: create index/constraints on temp tables, cannot do on table variables
+
+
+--view: virtual table that contains data from one or multiple tables
+SELECT *
+FROM Employee
+
+INSERT INTO Employee
+VALUES(1, 'Fred', 5000),(2, 'Laura', 7000), (3,'Amy', 6000)
+
+CREATE VIEW vwEmp
+AS
+SELECT * FROM Employee
+
+SELECT *
+FROM vwEmp
+
+INSERT INTO vwEmp
+VALUES(4, 'Sam', 9000)
+
+--sql injection: some hackers inject some malicious code to our sql queries, thus destroying our database
+SELECT *
+FROM vwEmp
+WHERE ID = 1 DROP VIEW vwEmp
+
+--prevent sql injection is to use stroed procedure
+
+--Pagination
+--OFFSET - skip
+--FETCH NEXT ROW - select
+
+SELECT CustomerID, ContactName, City
+FROM Customers
+ORDER BY CustomerID
+
+SELECT CustomerID, ContactName, City
+FROM Customers
+ORDER BY CustomerID
+OFFSET 10 ROWS
+FETCH NEXT 10 ROWS ONLY 
+
+--DECLARE @PageNumber AS INT
+--DECLARE @RowsOfPage AS INT
+--SET @PageNumber = 2
+--SET @RowsOfPage = 10
+--SELECT CustomerID, ContactName, City
+--FROM Customers
+--ORDER BY CustomerID
+--OFFSET (@PageNumber - 1) * @RowsOfPage ROWS
+--FETCH NEXT @RowsOfPage ROWS ONLY
+
+DECLARE @PageNumber AS INT
+DECLARE @RowsOfPage AS INT
+DECLARE @MaxTablePage AS FLOAT
+SET @PageNumber = 1
+SET @RowsOfPage = 10
+SELECT @MaxTablePage = COUNT(*) FROM Customers
+SET @MaxTablePage = CEILING(@MaxTablePage / @RowsOfPage)
+WHILE @MaxTablePage >= @PageNumber
+BEGIN
+SELECT CustomerID, ContactName, City
+FROM Customers
+ORDER BY CustomerID
+OFFSET (@PageNumber - 1) * @RowsOfPage ROWS
+FETCH NEXT @RowsOfPage ROWS ONLY
+SET @PageNumber = @PageNumber + 1
+END
+
