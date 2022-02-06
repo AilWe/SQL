@@ -1,0 +1,289 @@
+--stored procedure: a prepared sql query that we can save and reuse over and over again
+
+BEGIN
+PRINT 'Hello anonymous block'
+END
+
+--crate sp
+CREATE PROC spHello
+AS
+BEGIN
+PRINT 'Hello Stored Procedure'
+END
+
+EXEC spHello
+
+--sp can take parameters
+--input mode
+CREATE PROC spAddNumbers
+@a int,
+@b int
+AS
+BEGIN
+print @a + @b
+END
+
+EXEC spAddNumbers 10,20
+
+--output mode
+CREATE PROC spGetEmpName
+@id int,
+@ename varchar(20) out 
+AS
+BEGIN
+SELECT @ename = EName FROM Employee WHERE id = @id
+END
+
+BEGIN
+DECLARE @ename varchar(20)
+EXEC spGetEmpName 2,@ename output
+PRINT @ename
+END
+
+SELECT *
+FROM Employee
+
+--return
+CREATE PROC spGetEmployeeRecords
+AS
+BEGIN
+DECLARE @EmployeeRow AS INT
+SELECT @EmployeeRow = COUNT(*) FROM Employee
+RETURN @EmployeeRow
+END
+
+BEGIN
+DECLARE @result int
+EXEC @result = spGetEmployeeRecords
+PRINT @result
+END
+
+--compare return and out
+--both used to return a single value
+--return will only return integer
+--for other data type: out
+
+CREATE PROC spGetEmployeeNameById
+@id int
+AS
+BEGIN
+DECLARE @ename varchar(20)
+SELECT @ename = EName FROM Employee WHERE id = @id
+RETURN @ename
+END
+
+DECLARE @en varchar(20)
+EXEC @en = spGetEmployeeNameById 2
+PRINT @en
+
+--return more than one records --> table
+CREATE PROC spGetAllEmp
+AS
+BEGIN
+SELECT * FROM Employee
+END
+
+EXEC spGetAllEmp
+
+--trigger
+--DML trigger
+--DDL trigger
+--LogON trigger
+
+
+--user defined function
+CREATE FUNCTION GetTotalRevenue(@price money, @discount real, @quantity smallint) 
+returns money
+AS
+BEGIN
+DECLARE @revenue money
+SET @revenue = @price * (1 - @discount) * @quantity
+RETURN @revenue
+END
+
+SELECT od.UnitPrice, od.Discount, od.Quantity, dbo.GetTotalRevenue(UnitPrice, Discount, Quantity) AS TotalRevenue
+FROM [Order Details] od
+
+--funtion to return a table
+CREATE FUNCTION ExpensiveProduct(@threshold money)
+RETURNS TABLE
+AS
+RETURN SELECT * FROM Products WHERE UnitPrice > @threshold
+
+SELECT *
+FROM dbo.ExpensiveProduct(10)
+
+--sp vs. functions
+--usage: sp for DML, functions for calculations
+--how to call: sp called by its name, not in any sql queries; functions must be called in a sql query
+--input/out: sp may or may not have input/output; functions must have input and outputs
+--SP to call functions, but we cannot use function to call SP
+
+--ORM: object relational mapper --mapping c# objects and sql data
+--dapper: micro orm -- write sql queries -- inject sp with optimal queries
+--entity framework core --full orm --> generate sql queries 
+
+DROP TABLE Employee
+--contrainsts: restrictions/rules we set for the columns when we design the table
+CREATE TABLE Employee(
+Id int,
+EName varchar(20),
+Age int
+)
+SELECT *
+FROM Employee
+
+INSERT INTO Employee VALUES(1, 'Sam', 49)
+INSERT INTO Employee VALUES(NULL, NULL, NULL)
+
+DROP TABLE Employee
+CREATE TABLE Employee(
+Id int NOT NULL,
+EName varchar(20) NOT NULL,
+Age int
+)
+
+DROP TABLE Employee
+CREATE TABLE Employee(
+Id int UNIQUE,
+EName varchar(20) NOT NULL,
+Age int
+)
+
+SELECT *
+FROM Employee
+
+INSERT INTO Employee VALUES(1, 'Sam', 49)
+INSERT INTO Employee VALUES(Null, 'Fiona', 49)
+
+DROP TABLE Employee
+CREATE TABLE Employee(
+Id int PRIMARY KEY,
+EName varchar(20) NOT NULL,
+Age int
+)
+
+--PRIMARY KEY: not null + unique
+-- pk vs. unique key
+--1. pk cannot accpet any null value, but unique key can accept one and only one null value
+--2. one table can have multiple unique keys, but only one pk
+--3. pk will sort the data by default, but unique key will not
+
+SELECT *
+FROM Employee
+
+INSERT INTO Employee
+VALUES(4, 'Fred', 45)
+
+INSERT INTO Employee
+VALUES(1, 'Laura', 34)
+
+INSERT INTO Employee
+VALUES(3, 'Peter', 19)
+
+INSERT INTO Employee
+VALUES(2, 'Stella', 24)
+--4. pk will by default create clustered index, while unique key will crate non-clustered index
+
+SELECT *
+FROM Employee
+
+INSERT INTO Employee
+VALUES(5, 'Monster', 3000)
+
+INSERT INTO Employee
+VALUES(6, 'Weird', -24)
+
+--check constraint: limit the value range that can be placed in a column
+DELETE Employee
+ALTER TABLE Employee
+ADD Constraint Chk_Age_Employee CHECK(Age BETWEEN 18 AND 65)
+
+--CREATE TABLE Employee(
+--Id int PRIMARY KEY,
+--EName varchar(20) NOT NULL,
+--Age int CHECK(Age between 18 and 65)
+--)
+
+SELECT *
+FROM Employee
+
+--identity
+CREATE TABLE Product(
+Id int primary key IDENTITY(1,1),
+ProductName varchar(20) unique not null,
+UnitPrice Money
+)
+
+INSERT INTO Product VALUES('Green Tea', 2)
+INSERT INTO Product VALUES('Latte', 3)
+INSERT INTO Product VALUES('Cold Brew', 4)
+
+SELECT *
+FROM Product
+
+--referential integrity: implemented by fk
+--department table
+--employee table
+
+DROP TABLE Employee
+
+CREATE TABLE Department(
+Id int primary key,
+DName varchar(20) NOT NULL,
+Loc varchar(20)
+)
+
+CREATE TABLE Employee(
+Id int primary key,
+Ename varchar(20) not null,
+Age int check(age between 18 and 65),
+DeptId int foreign key references Department(Id)
+)
+
+SELECT * FROM Department
+SELECT * FROM Employee
+
+INSERT INTO Department VALUES(1, 'IT', 'VA')
+INSERT INTO Department VALUES(2, 'HR', 'TX')
+INSERT INTO Department VALUES(3, 'Marketing', 'CA')
+
+INSERT INTO Employee VALUES(1, 'Fred', 34, 1)
+INSERT INTO Employee VALUES(2, 'Peter', 34, 3)
+
+DELETE FROM Department
+WHERE ID = 2
+
+--on delete cascade: delete records from the child table, then delte the records from parent table
+CREATE TABLE Department(
+Id int primary key,
+DName varchar(20) NOT NULL,
+Loc varchar(20)
+)
+
+CREATE TABLE Employee(
+Id int primary key,
+Ename varchar(20) not null,
+Age int check(age between 18 and 65),
+DeptId int foreign key references Department(Id) on delete cascade
+)
+
+SELECT * FROM Department
+SELECT * FROM Employee
+
+DELETE FROM Department
+WHERE ID = 1
+
+--on delete set null: set the dependent value to null in the child table, then delte from the parent table
+CREATE TABLE Employee(
+Id int primary key,
+Ename varchar(20) not null,
+Age int check(age between 18 and 65),
+DeptId int foreign key references Department(Id) on delete set null
+)
+
+SELECT * FROM Department
+SELECT * FROM Employee
+
+DELETE FROM Department
+WHERE ID = 1
